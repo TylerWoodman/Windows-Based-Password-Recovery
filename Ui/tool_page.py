@@ -189,14 +189,46 @@ elif page == "Audit and Report Page":
 
     st.markdown("----------------------------")
 
-    def create_pdf():
+    def create_pdf(log_data):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font('Arial','B',size=16)
-        pdf.cell(40,10, txt="Hello World")
+        pdf.set_font('Arial','B', 16)
+        pdf.cell(40,10, txt=f"Forensic Report: {case_id}")
+        pdf.ln(10)
 
+        pdf.set_font('Arial','B', 12)
+        pdf.cell(0,10, txt=f"Investigator: {investigator}", ln=True)
+        pdf.cell(0,10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
+        pdf.ln(5)
+
+        pdf.set_font('Arial','B', 12)
+        pdf.cell(0, 10, txt="Audit Log Events:" , ln=True)
+
+        pdf.set_font('Arial', size=10)
+        for entry in log_data:
+            row = f"{entry['Time']} | {entry['Event']}"
+            pdf.cell(0,8, txt=row, ln=True, border=1)
+
+        return pdf.output(dest='S').encode('latin-1')  
+    
     col1,col2 = st.columns(2)
     with col1:
-        st.button("Generate PDF Report")
+        if st.session_state['audit_log']:
+            pdf_bytes = create_pdf(st.session_state['audit_log'])
+
+            st.download_button(
+            label = "Download PDF Report 📄",
+            data = pdf_bytes,
+            file_name = f"Forensic_Report_{case_id}.pdf",
+            mime = "application/pdf"
+        )
+            
     with col2:
-        st.button("Export log")
+        if st.session_state['audit_log']:
+            csv = dataframe_log.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label = "Export CSV Log 💾",
+                data = csv,
+                file_name = f"Log_{case_id}.csv",
+                mime = "text/csv"
+            )
