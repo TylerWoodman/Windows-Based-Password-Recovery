@@ -4,8 +4,8 @@ import numpy as np
 import time
 from datetime import datetime
 import psutil
-import fpdf
 from fpdf import FPDF
+import Ui.backend as backend
 
 ########## Navigation sidebar ###########
 
@@ -140,9 +140,9 @@ elif page == "Attack Page":
 
         with st.expander("Rule Selection"):
             st.write("Select rules to apply to the dictionary:")
-            st.checkbox("rule1")
-            st.checkbox("rule2")
-            st.checkbox("rule3")
+            st.checkbox("Append Year")
+            st.checkbox("Best64")
+            st.checkbox("Leet Speak Substitution")
 
     elif attack_type == "Rainbow attack":
         st.subheader("Rainbow attack")
