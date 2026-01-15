@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 import psutil
 from fpdf import FPDF
-import Ui.backend as backend
+import backend
 
 ########## Navigation sidebar ###########
 
@@ -138,6 +138,10 @@ elif page == "Attack Page":
         st.subheader("Dictionary attack settings")
         uploaded_dictionary = st.file_uploader("Upload wordlist")
 
+        if uploaded_dictionary is not None:
+            st.session_state['wordlist_file'] = uploaded_dictionary
+            st.success("Dictionary loaded successfully.")
+
         with st.expander("Rule Selection"):
             st.write("Select rules to apply to the dictionary:")
             st.checkbox("Append Year")
@@ -168,15 +172,32 @@ elif page == "Recovery Progress Page":
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        for i in range(100):
-            status_text.text(f"Testing possible passwords {i * 400} .... please wait")
-            progress_bar.progress(i + 1)
-            time.sleep(0.03)
+        if 'wordlist_file' not in st.session_state:
+            st.error("No dictionary found. Please go back to the attack page and upload a file.")
+        else:
+            wordlist = st.session_state['wordlist_file']
 
-        st.success("**Password found!**")
-        st.metric("Recovered Password" , "Password123")
+            def progress_update(percent):
+                progress_bar.progress(percent)
+                progress_text = int(percent * 100)
+                status_text.text(f"Checking dictionary... {progress_text}%")
+            
+            hardcoded_target = "8846F7EAEE8FB117AD06BDD830B7586C"
 
-        log_event(f"Success: Recovered password = 'Password123' using {current_attack}")
+            result = backend.dictionary_attack(hardcoded_target,wordlist,progress_update)
+
+            if result['success']:
+                progress_bar.progress(100)
+                st.balloons()
+                st.success("**Password found!**")
+                password = result['password']
+                total_time = round(result['time'])
+                st.metric("Password found" , password)
+                st.caption(f"Time taken: {total_time} seconds")
+                log_event(f"Success: Recovered {password}")
+            else:
+                st.error("Password not found in dictionary.")
+                log_event("Attack failed.")
 
 ########### Audit and Report page ##########
 
