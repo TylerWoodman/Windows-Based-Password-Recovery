@@ -1,5 +1,31 @@
 from Crypto.Hash import MD4
 import time
+import tempfile
+import os
+import datetime
+import struct
+from impacket.examples.secretsdump import LocalOperations, SAMHashes
+
+def datetime_patch(self, filetime):
+    try:
+        if isinstance(filetime, bytes):
+            filetime = struct.unpack('<Q', filetime)[0]
+
+        days = (1970-1601)*(365)
+        leap_years = (1970-1601) / 4 - 3
+        days = days + round(leap_years) 
+        seconds = days * 60 * 60 * 24
+        nano_to_seconds = filetime / 10000000
+        unix_time = nano_to_seconds - seconds
+
+        if unix_time < 0:
+            return datetime.datetime(1970, 1, 1)
+        
+        return datetime.datetime.utcfromtimestamp(unix_time)
+    except (OSError, ValueError, OverflowError, struct.error):
+        return datetime.datetime(1970, 1, 1)
+
+SAMHashes.nt_time_to_datetime = datetime_patch
 
 def generate_ntlm_hash(password):
     password_bytes = password.encode('utf-16le')
@@ -50,3 +76,40 @@ target_hash = "8846F7EAEE8FB117AD06BDD830B7586C"
 file = open("test_wordlist.txt", "rb")
 result = dictionary_attack(target_hash, file, None)
 print(f"Test result = {result}")
+
+def extract_ntlm_hash (SAM_file, SYSTEM_file):
+    extracted_credentials = []
+    SAM_file.seek(0)
+    SYSTEM_file.seek(0)
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_SAM:
+        temp_SAM.write(SAM_file.read())
+        SAM_path = temp_SAM.name
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_SYSTEM:
+        temp_SYSTEM.write(SYSTEM_file.read())
+        SYSTEM_path = temp_SYSTEM.name
+
+    try:
+        local_operations = LocalOperations(SYSTEM_path)
+        boot_key = local_operations.getBootKey()
+
+        def save_hash_to_list(found_credentials):
+            extracted_credentials.append(found_credentials)
+
+        SAM_dump = SAMHashes(SAM_path, boot_key, isRemote=False, perSecretCallback=save_hash_to_list)
+        SAM_dump.dump()
+        SAM_dump.finish()
+
+    except Exception as e:
+        return (f"Error = {str(e)}")
+    
+    finally:
+        try:
+            os.remove(SAM_path)
+            os.remove(SYSTEM_path)
+        except:
+            pass
+
+    return extracted_credentials
+        

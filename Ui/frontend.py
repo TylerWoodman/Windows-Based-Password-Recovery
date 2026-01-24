@@ -69,9 +69,28 @@ elif page == "Hash Page":
         
         if SAM_file and system_file:
             if st.button("Extract NTLM hash"):
-                st.session_state['target_hashes'].append("Woody001NTLMHASH")
-                st.success("Extracted NTLM hash")
-                log_event("Extracted NTLM hash from windows artifact")
+                with st.spinner("Finding boot key..."):
+                    results = backend.extract_ntlm_hash(SAM_file, system_file)
+
+                if results:
+                    if len(results) > 0 and results[0].startswith("Error"):
+                        st.error(results[0])
+                    
+                    else:
+                        amount = len(results)
+                        st.success(f"Successfully extracted {amount} accounts.")
+                        with st.expander("Test"):
+                            st.write(results)
+
+                        for credentials in results:
+                            parts = credentials.split(':')
+                            if len(parts) > 3:
+                                username = parts[0]
+                                NTLM_hash = parts[3]
+                                st.code(f"User = {username} , Hash = {NTLM_hash}" , language="yaml")
+                                st.session_state['target_hashes'].append(NTLM_hash)
+
+                        log_event("Extracted NTLM hash from windows artifact")
 
     with tab3:
         hash_input = st.text_input("Input hash")
