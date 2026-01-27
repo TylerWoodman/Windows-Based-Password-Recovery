@@ -5,6 +5,7 @@ import os
 import datetime
 import struct
 from impacket.examples.secretsdump import LocalOperations, SAMHashes
+import itertools
 
 def datetime_patch(self, filetime):
     try:
@@ -33,16 +34,18 @@ def generate_ntlm_hash(password):
     md4_hash.update(password_bytes)
     return md4_hash.hexdigest().upper()
 
-test_hash = generate_ntlm_hash("password")
-print(f"Generated NTLM hash = {test_hash}")
+#test_hash = generate_ntlm_hash("password")
+#print(f"Generated NTLM hash = {test_hash}")
 
-if test_hash == "8846F7EAEE8FB117AD06BDD830B7586C":
-    print("Function works.")
-else:
-    print("Function error.")
+#if test_hash == "8846F7EAEE8FB117AD06BDD830B7586C":
+    #print("Function works.")
+#else:
+    #print("Function error.")
 
+def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker = None):
+    if rules is None:
+        rules = {}
 
-def dictionary_attack(target_hash, wordlist_file, progress_checker = None):
     target_hash = target_hash.upper()
     wordlist_file.seek(0)
 
@@ -50,19 +53,35 @@ def dictionary_attack(target_hash, wordlist_file, progress_checker = None):
     wordlist_file.seek(0)
     start_time = time.time()
 
+    year_rule = rules.get("append_year", False)
+    leet_rule = rules.get("leet_speak", False)
+
     for index, line in enumerate(wordlist_file):
         try:
-            password_candidate = line.decode('latin-1').strip()
+            base_word = line.decode('latin-1').strip()
         except UnicodeDecodeError:
             continue
 
-        candidate_hash = generate_ntlm_hash(password_candidate)
+        candidates = [base_word]
+
+        if leet_rule:
+            candidates.extend(leet_speak(base_word))
+
+        if year_rule:
+            new_variations = []
+            for c in candidates:
+                new_variations.extend(append_year(c))
+            candidates.extend(new_variations)
+
+        for candidate in candidates:
+            #print(f"{candidate}")
+            candidate_hash = generate_ntlm_hash(candidate)
 
         if candidate_hash == target_hash:
             duration = time.time() - start_time
             return {
                 "success" : True,
-                "password" : password_candidate,
+                "password" : candidate,
                 "time" : duration
             }
           
@@ -113,3 +132,39 @@ def extract_ntlm_hash (SAM_file, SYSTEM_file):
 
     return extracted_credentials
         
+def append_year(word):
+    variations = []
+    current_year = datetime.datetime.now().year
+    for y in range(current_year - 10, current_year - 2):
+        variations.append(f"{word}{y}")
+
+        #### print(variations) #####
+
+    return variations
+    
+def leet_speak(word):
+    substitutions = {
+        'a':['a','@','4'],
+        'b':['b','8'],
+        'c':['c','[','('],
+        'e':['e','3'],
+        'g':['g','6'],
+        'h':['h','#'],
+        'i':['i','1'],
+        'l':['i','1'],
+        'o':['o','0'],
+        's':['s','$','5'],
+        't':['t','7','+'],
+        'z':['z','2']
+    }
+
+    character_options = []
+    for character in word.lower():
+        options = substitutions.get(character, [character])
+        character_options.append(options)
+
+    all_variations = []
+    for combination in itertools.product(*character_options):
+        all_variations.append("".join(combination))
+
+    return all_variations

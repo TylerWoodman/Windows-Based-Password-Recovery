@@ -1,3 +1,6 @@
 hello
-hello
-password
+lizard
+road
+house
+john
+goodbye

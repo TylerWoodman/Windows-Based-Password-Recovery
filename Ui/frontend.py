@@ -163,15 +163,24 @@ elif page == "Attack Page":
 
         with st.expander("Rule Selection"):
             st.write("Select rules to apply to the dictionary:")
-            st.checkbox("Append Year")
-            st.checkbox("Best64")
-            st.checkbox("Leet Speak Substitution")
+            year_rule = st.checkbox("Append Year")
+            leet_rule = st.checkbox("Leet Speak Substitution")
+
+            current_rules = {
+                "append_year": year_rule,
+                "leet_speak": leet_rule
+            }
 
     elif attack_type == "Rainbow attack":
         st.subheader("Rainbow attack")
 
     if st.button("Save attack configuration"):
         st.session_state['attack_config'] = attack_type
+        if attack_type == "Dictionary-based":
+            st.session_state['attack_rules'] = current_rules
+        else:
+            st.session_state['attack_rules'] = {}
+
         st.success(f"Configuration saved: {attack_type}")
         log_event(f"Attack configured: {attack_type}")
         
@@ -184,12 +193,20 @@ elif page == "Recovery Progress Page":
         st.warning("Please select and configure an attack on the **Attack Page**")
         st.stop()
 
+    if not st.session_state['target_hashes']:
+        st.warning("Please upload or extract a hash on the **Hash Page**")
+        st.stop()
+
+    hash_selection = st.selectbox("Select Target Hash" , st.session_state['target_hashes'])
+    target_hash = hash_selection
+
     current_attack = st.session_state['attack_config']
-    st.info(f"Ready to start recovery process using: **{current_attack}**")
+    st.info(f"Target = **{target_hash}**\n\nAttack = **{current_attack}**")
 
     if st.button("Start attack"):
         progress_bar = st.progress(0)
         status_text = st.empty()
+        rules_configuration = st.session_state.get('attack_rules', {})
 
         if 'wordlist_file' not in st.session_state:
             st.error("No dictionary found. Please go back to the attack page and upload a file.")
@@ -200,17 +217,15 @@ elif page == "Recovery Progress Page":
                 progress_bar.progress(percent)
                 progress_text = int(percent * 100)
                 status_text.text(f"Checking dictionary... {progress_text}%")
-            
-            hardcoded_target = "8846F7EAEE8FB117AD06BDD830B7586C"
 
-            result = backend.dictionary_attack(hardcoded_target,wordlist,progress_update)
+            result = backend.dictionary_attack(target_hash,wordlist,rules_configuration,progress_update)
 
             if result['success']:
                 progress_bar.progress(100)
                 st.balloons()
                 st.success("**Password found!**")
                 password = result['password']
-                total_time = round(result['time'])
+                total_time = round(result['time'], 4)
                 st.metric("Password found" , password)
                 st.caption(f"Time taken: {total_time} seconds")
                 log_event(f"Success: Recovered {password}")
