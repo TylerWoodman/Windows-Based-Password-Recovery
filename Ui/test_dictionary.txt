@@ -1,6 +1,0 @@
-hello
-lizard
-road
-house
-john
-goodbye
