@@ -6,6 +6,8 @@ import datetime
 import struct
 from impacket.examples.secretsdump import LocalOperations, SAMHashes
 import itertools
+import msoffcrypto
+from pypdf import PdfReader, PdfWriter
 
 def datetime_patch(self, filetime):
     try:
@@ -46,9 +48,16 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
     if rules is None:
         rules = {}
 
-    target_hash = target_hash.upper()
-    wordlist_file.seek(0)
+    file_path = os.path.isfile(target_hash)
+    file_type = None
 
+    if file_path:
+        if target_hash.lower().endswith(".docx"): file_type = "word"
+        elif target_hash.lower().endswith(".pdf"): file_type = "pdf"
+    else:
+        target_hash = target_hash.upper()
+
+    wordlist_file.seek(0)
     total_lines = sum(1 for _ in wordlist_file)
     wordlist_file.seek(0)
     start_time = time.time()
@@ -75,15 +84,27 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
         for candidate in candidates:
             #print(f"{candidate}")
-            candidate_hash = generate_ntlm_hash(candidate)
+            found = False
 
-        if candidate_hash == target_hash:
-            duration = time.time() - start_time
-            return {
-                "success" : True,
-                "password" : candidate,
-                "time" : duration
-            }
+            if file_path:
+                if file_type == "word":
+                    if check_msword_password(target_hash, candidate):
+                        found = True
+                elif file_type == "pdf":
+                    if check_pdf_password(target_hash, candidate):
+                        found = True
+            
+            else:
+                if generate_ntlm_hash(candidate) == target_hash:
+                    found = True
+
+            if found:
+                duration = time.time() - start_time
+                return {
+                    "success" : True,
+                    "password" : candidate,
+                    "time" : duration
+                }
           
         if progress_checker and index % 100 == 0:
             progress = min(index / total_lines, 1.0)
@@ -91,10 +112,10 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
     return {"success" : False, "time" : time.time() - start_time}
 
-target_hash = "8846F7EAEE8FB117AD06BDD830B7586C"
-file = open("test_wordlist.txt", "rb")
-result = dictionary_attack(target_hash, file, None)
-print(f"Test result = {result}")
+# target_hash = "8846F7EAEE8FB117AD06BDD830B7586C"
+# file = open("test_wordlist.txt", "rb")
+# result = dictionary_attack(target_hash, file, None)
+# print(f"Test result = {result}")
 
 def extract_ntlm_hash (SAM_file, SYSTEM_file):
     extracted_credentials = []
@@ -135,7 +156,7 @@ def extract_ntlm_hash (SAM_file, SYSTEM_file):
 def append_year(word):
     variations = []
     current_year = datetime.datetime.now().year
-    for y in range(current_year - 10, current_year - 2):
+    for y in range(current_year - 10, current_year + 2):
         variations.append(f"{word}{y}")
 
         #### print(variations) #####
@@ -168,3 +189,25 @@ def leet_speak(word):
         all_variations.append("".join(combination))
 
     return all_variations
+
+def check_msword_password(file_path, password):
+    try:
+        with open(file_path, "rb") as f:
+            file = msoffcrypto.OfficeFile(f)
+            file.load_key(password=password, verify_password=True)
+            return True
+    except Exception:
+        return False
+
+def check_pdf_password(file_path, password):
+    try:
+        reader = PdfReader(file_path)
+        if reader.is_encrypted:
+            if reader.decrypt(password) > 0:
+                return True
+            else:
+                return False
+        else:
+            return True
+    except:
+        return False

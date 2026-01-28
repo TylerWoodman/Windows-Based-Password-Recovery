@@ -113,6 +113,8 @@ elif page == "Hash Page":
             file_name = document_upload.name
 
             if st.button("Add to target list"):
+                with open(file_name, "wb") as f:
+                    f.write(document_upload.getbuffer())
                 st.session_state['target_hashes'].append(f"{file_name}")
                 st.success("Document saved")
                 log_event(f"Document uploaded : {file_name}")
