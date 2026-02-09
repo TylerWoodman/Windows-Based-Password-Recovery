@@ -64,6 +64,10 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
     year_rule = rules.get("append_year", False)
     leet_rule = rules.get("leet_speak", False)
+    custom_prefix = rules.get("custom_prefix", "")
+    custom_suffix = rules.get("custom_suffix", "")
+    #reverse_rule = rules.get("reverse_rule", False)
+    #capitalize_rule = rules.get("capitalize_rule", False)
 
     for index, line in enumerate(wordlist_file):
         try:
@@ -76,6 +80,15 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
         if leet_rule:
             candidates.extend(leet_speak(base_word))
 
+        if custom_prefix or custom_suffix:
+            prefix = custom_prefix if custom_prefix else ""
+            suffix = custom_suffix if custom_suffix else ""
+
+            add_to_existing = []
+            for candidate in candidates:
+                add_to_existing.append(f"{prefix}{candidate}{suffix}")
+            candidates.extend(add_to_existing)
+
         if year_rule:
             new_variations = []
             for c in candidates:
@@ -83,7 +96,7 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
             candidates.extend(new_variations)
 
         for candidate in candidates:
-            #print(f"{candidate}")
+            print(f"{candidate}")
             found = False
 
             if file_path:
@@ -153,14 +166,18 @@ def extract_ntlm_hash (SAM_file, SYSTEM_file):
 
     return extracted_credentials
         
+#def capitalize_password(word):
+    #return word.capitalize()
+
+#def reverse_password(word):
+    #return word[::-1]
+
 def append_year(word):
     variations = []
     current_year = datetime.datetime.now().year
-    for y in range(current_year - 10, current_year + 2):
+    for y in range(current_year - 2, current_year + 0):
         variations.append(f"{word}{y}")
-
         #### print(variations) #####
-
     return variations
     
 def leet_speak(word):

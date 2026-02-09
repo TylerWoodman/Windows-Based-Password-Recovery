@@ -167,10 +167,25 @@ elif page == "Attack Page":
             st.write("Select rules to apply to the dictionary:")
             year_rule = st.checkbox("Append Year")
             leet_rule = st.checkbox("Leet Speak Substitution")
+            capitalize_rule = st.checkbox("Capitalize First letter")
+            reverse_rule = st.checkbox("Reverse word")
+
+            st.markdown("-----------------")
+            st.write('Custom User Rules')
+            
+            col_1c,col_2c = st.columns(2)
+            with col_1c:
+                custom_prefix = st.text_input("Add Prefix (start)", placeholder="e.g. Admin")
+            with col_2c:
+                custom_suffix = st.text_input("Add Suffix (end)", placeholder="e.g. !")
 
             current_rules = {
                 "append_year": year_rule,
-                "leet_speak": leet_rule
+                "leet_speak": leet_rule,
+                "custom_prefix": custom_prefix,
+                "custom_suffix": custom_suffix,
+                "capitalize_rule": capitalize_rule,
+                "reverse_rule": reverse_rule
             }
 
     elif attack_type == "Rainbow attack":
