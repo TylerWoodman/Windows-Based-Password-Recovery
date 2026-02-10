@@ -66,8 +66,8 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
     leet_rule = rules.get("leet_speak", False)
     custom_prefix = rules.get("custom_prefix", "")
     custom_suffix = rules.get("custom_suffix", "")
-    #reverse_rule = rules.get("reverse_rule", False)
-    #capitalize_rule = rules.get("capitalize_rule", False)
+    reverse_rule = rules.get("reverse_rule", False)
+    capitalize_rule = rules.get("capitalize_rule", False)
 
     for index, line in enumerate(wordlist_file):
         try:
@@ -78,7 +78,26 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
         candidates = [base_word]
 
         if leet_rule:
-            candidates.extend(leet_speak(base_word))
+            leet_variations = leet_speak(base_word)
+            for leet in leet_variations:
+                if leet not in candidates:
+                    candidates.append(leet)
+            
+        if capitalize_rule:
+            capitalized_items = []
+            for candidate in candidates:
+                capital = capitalize_password(candidate)
+                if capital not in candidates:
+                    capitalized_items.append(capital)
+            candidates.extend(capitalized_items)
+
+        if reverse_rule:
+            reversed_items = []
+            for candidate in candidates:
+                reversed_word = reverse_password(candidate)
+                if reversed_word not in candidates:
+                    reversed_items.append(reversed_word)
+            candidates.extend(reversed_items)
 
         if custom_prefix or custom_suffix:
             prefix = custom_prefix if custom_prefix else ""
@@ -91,8 +110,8 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
         if year_rule:
             new_variations = []
-            for c in candidates:
-                new_variations.extend(append_year(c))
+            for candidate in candidates:
+                new_variations.extend(append_year(candidate))
             candidates.extend(new_variations)
 
         for candidate in candidates:
@@ -166,11 +185,11 @@ def extract_ntlm_hash (SAM_file, SYSTEM_file):
 
     return extracted_credentials
         
-#def capitalize_password(word):
-    #return word.capitalize()
+def capitalize_password(word):
+    return word.capitalize()
 
-#def reverse_password(word):
-    #return word[::-1]
+def reverse_password(word):
+    return word[::-1]
 
 def append_year(word):
     variations = []
