@@ -131,6 +131,12 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                     found = True
 
             if found:
+                try:
+                    with open("golden_dictionary.txt" , "a") as f:
+                        f.write(f"{candidate}\n")
+                except Exception as Error:
+                    print(f"Error saving to golden dictionary: {Error}")
+
                 duration = time.time() - start_time
                 return {
                     "success" : True,
