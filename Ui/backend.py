@@ -8,6 +8,7 @@ from impacket.examples.secretsdump import LocalOperations, SAMHashes
 import itertools
 import msoffcrypto
 from pypdf import PdfReader, PdfWriter
+import concurrent.futures
 
 def datetime_patch(self, filetime):
     try:
@@ -44,6 +45,20 @@ def generate_ntlm_hash(password):
 #else:
     #print("Function error.")
 
+def check_individual_password(candidate, target_hash, file_path, file_type):
+    if file_path:
+        if file_type == "word":
+            if check_msword_password(target_hash, candidate):
+                return candidate
+        elif file_type == "pdf":
+            if check_pdf_password(target_hash, candidate):
+                return candidate
+    else:
+        if generate_ntlm_hash(candidate) == target_hash:
+            return candidate
+        
+    return None
+
 def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker = None):
     if rules is None:
         rules = {}
@@ -69,85 +84,77 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
     reverse_rule = rules.get("reverse_rule", False)
     capitalize_rule = rules.get("capitalize_rule", False)
 
-    for index, line in enumerate(wordlist_file):
-        try:
-            base_word = line.decode('latin-1').strip()
-        except UnicodeDecodeError:
-            continue
+    batch_size = 50
+    waiting_list = []
 
-        candidates = [base_word]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    #with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
 
-        if leet_rule:
-            leet_variations = leet_speak(base_word)
-            for leet in leet_variations:
-                if leet not in candidates:
-                    candidates.append(leet)
+        for index, line in enumerate(wordlist_file):
+            try:
+                base_word = line.decode('latin-1').strip()
+            except UnicodeDecodeError:
+                continue
+
+            candidates = [base_word]
+
+            if leet_rule:
+                leet_variations = leet_speak(base_word)
+                for leet in leet_variations:
+                    if leet not in candidates:
+                        candidates.append(leet)
             
-        if capitalize_rule:
-            capitalized_items = []
+            if capitalize_rule:
+                capitalized_items = []
+                for candidate in candidates:
+                    capital = capitalize_password(candidate)
+                    if capital not in candidates:
+                        capitalized_items.append(capital)
+                candidates.extend(capitalized_items)
+
+            if reverse_rule:
+                reversed_items = []
+                for candidate in candidates:
+                    reversed_word = reverse_password(candidate)
+                    if reversed_word not in candidates:
+                        reversed_items.append(reversed_word)
+                candidates.extend(reversed_items)
+
+            if custom_prefix or custom_suffix:
+                prefix = custom_prefix if custom_prefix else ""
+                suffix = custom_suffix if custom_suffix else ""
+
+                add_to_existing = []
+                for candidate in candidates:
+                    add_to_existing.append(f"{prefix}{candidate}{suffix}")
+                candidates.extend(add_to_existing)
+
+            if year_rule:
+                new_variations = []
+                for candidate in candidates:
+                    new_variations.extend(append_year(candidate))
+                candidates.extend(new_variations)
+
             for candidate in candidates:
-                capital = capitalize_password(candidate)
-                if capital not in candidates:
-                    capitalized_items.append(capital)
-            candidates.extend(capitalized_items)
+                #print(f"{candidate}")
+                future = executor.submit(check_individual_password, candidate, target_hash, file_path, file_type)
+                waiting_list.append(future)
 
-        if reverse_rule:
-            reversed_items = []
-            for candidate in candidates:
-                reversed_word = reverse_password(candidate)
-                if reversed_word not in candidates:
-                    reversed_items.append(reversed_word)
-            candidates.extend(reversed_items)
+            if index % batch_size == 0 or index == total_lines - 1:
 
-        if custom_prefix or custom_suffix:
-            prefix = custom_prefix if custom_prefix else ""
-            suffix = custom_suffix if custom_suffix else ""
+                for future in concurrent.futures.as_completed(waiting_list):
+                    result = future.result()
+                    if result:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        save_to_golden_dictionary(result)
+                        return success_response(result, start_time)
+                    
+                waiting_list = []
 
-            add_to_existing = []
-            for candidate in candidates:
-                add_to_existing.append(f"{prefix}{candidate}{suffix}")
-            candidates.extend(add_to_existing)
-
-        if year_rule:
-            new_variations = []
-            for candidate in candidates:
-                new_variations.extend(append_year(candidate))
-            candidates.extend(new_variations)
-
-        for candidate in candidates:
-            print(f"{candidate}")
-            found = False
-
-            if file_path:
-                if file_type == "word":
-                    if check_msword_password(target_hash, candidate):
-                        found = True
-                elif file_type == "pdf":
-                    if check_pdf_password(target_hash, candidate):
-                        found = True
-            
-            else:
-                if generate_ntlm_hash(candidate) == target_hash:
-                    found = True
-
-            if found:
-                try:
-                    with open("golden_dictionary.txt" , "a") as f:
-                        f.write(f"{candidate}\n")
-                except Exception as Error:
-                    print(f"Error saving to golden dictionary: {Error}")
-
-                duration = time.time() - start_time
-                return {
-                    "success" : True,
-                    "password" : candidate,
-                    "time" : duration
-                }
-          
-        if progress_checker and index % 100 == 0:
-            progress = min(index / total_lines, 1.0)
-            progress_checker(progress)
-
+                if progress_checker and index % 100 == 0:
+                    progress = min(index / total_lines, 1.0)
+                    progress_checker(progress)
+                
     return {"success" : False, "time" : time.time() - start_time}
 
 # target_hash = "8846F7EAEE8FB117AD06BDD830B7586C"
@@ -190,7 +197,22 @@ def extract_ntlm_hash (SAM_file, SYSTEM_file):
             pass
 
     return extracted_credentials
-        
+
+def save_to_golden_dictionary(password):
+    try:
+        with open("golden_dictionary.txt" , "a") as f:
+            f.write(f"{password}\n")
+    except Exception as Error:
+            print(f"Error saving to golden dictionary: {Error}")
+
+def success_response(password, start_time):
+    duration = time.time() - start_time
+    return {
+            "success" : True,
+            "password" : password,
+            "time" : duration
+    }
+
 def capitalize_password(word):
     return word.capitalize()
 
