@@ -5,6 +5,8 @@ import time
 from datetime import datetime
 import psutil
 from fpdf import FPDF
+import json
+import subprocess
 import backend
 
 ########## Navigation sidebar ###########
@@ -16,6 +18,34 @@ case_id = st.sidebar.text_input("Input Case Reference" , "CASE-0012025")
 investigator = st.sidebar.text_input("Input investigator name" , "Woody Woodchip")
 
 page = st.sidebar.radio("Navigation",["Home Page","Hash Page","Attack Page","Recovery Progress Page","Audit and Report Page"])
+
+st.sidebar.markdown('--------------------')
+if st.sidebar.button("Terminate" , type="primary" , use_container_width=True):
+    with st.spinner("Terminating processes..."):
+        terminated = 0
+        for process in psutil.process_iter(['pid' , 'name' , 'cmdline']):
+            try:
+                cmdline = process.info.get('cmdline') or []
+                cmd_string = " ".join(cmdline).lower()
+        
+                if 'backend.py' in cmd_string:
+                    for child in process.children(recursive=True):
+                        child.kill()
+                        terminated += 1
+                    process.kill()
+                    terminated +=1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if terminated > 0:
+            try:
+                with open("progress.json" , "w") as f:
+                    json.dump({"progress" : 0.0, "state" : "failed", "password" : None, "time" : 0}, f)
+            except Exception:
+                pass
+            st.sidebar.success(f"Terminated {terminated} processes.")
+        else:
+            st.sidebar.info("No backend processes to terminate.")
+
  
 if 'audit_log' not in st.session_state:
     st.session_state['audit_log'] = []
@@ -231,8 +261,6 @@ elif page == "Recovery Progress Page":
     st.info(f"Target = **{target_hash}**\n\nAttack = **{current_attack}**")
 
     if st.button("Start attack"):
-        progress_bar = st.progress(0)
-        status_text = st.empty()
         rules_configuration = st.session_state.get('attack_rules', {})
 
         if 'wordlist_file' not in st.session_state:
@@ -240,25 +268,62 @@ elif page == "Recovery Progress Page":
         else:
             wordlist = st.session_state['wordlist_file']
 
-            def progress_update(percent):
-                progress_bar.progress(percent)
-                progress_text = int(percent * 100)
-                status_text.text(f"Checking dictionary... {progress_text}%")
+            with st.spinner("Preparing uploaded files..."):
+                task_data = {
+                    "target_hash": target_hash,
+                    "rules": rules_configuration
+                }
+                with open("task.json" , "w") as f:
+                    json.dump(task_data, f)
 
-            result = backend.dictionary_attack(target_hash,wordlist,rules_configuration,progress_update)
+                with open("temporary_wordlist.txt" , "wb") as f:
+                    wordlist.seek(0)
+                    f.write(wordlist.read())
+            
+            st.success("Starting recovery process....")
 
-            if result['success']:
-                progress_bar.progress(100)
-                st.balloons()
-                st.success("**Password found!**")
-                password = result['password']
-                total_time = round(result['time'], 4)
-                st.metric("Password found" , password)
-                st.caption(f"Time taken: {total_time} seconds")
-                log_event(f"Success: Recovered {password}")
-            else:
-                st.error("Password not found in dictionary.")
-                log_event("Attack failed.")
+            with open("progress.json" , "w") as f:
+                json.dump({"progress":0.0, "state":"running","password":None, "time": 0}, f)
+
+            backend = subprocess.Popen(["python" , "backend.py"])
+
+            progress_bar = st.progress(0.0)
+            status_text = st.empty()
+
+            while True:
+                try:
+                    with open("progress.json" , "r") as f:
+                        progress_status = json.load(f)
+
+                    current_progress = progress_status.get("progress", 0.0)
+                    progress_bar.progress(current_progress)
+                    status_text.text(f"Checking dictionary.... {int(current_progress * 100)}%")
+
+                    if progress_status.get("state") == "found":
+                        progress_bar.progress(1.0)
+                        status_text.empty()
+                        st.balloons()
+                        st.success("**Password found**")
+
+                        password = progress_status.get('password')
+                        total_time = round(progress_status.get('time' , 0), 4)
+
+                        st.metric("Password found" , password)
+                        st.caption(f"Time taken: {total_time} seconds")
+                        log_event(f"Success: Recovered {password}")
+                        break
+
+                    elif progress_status.get("state") == "failed":
+                        progress_bar.progress(1.0)
+                        status_text.empty()
+                        st.error("Password not found in dictionary.")
+                        log_event("Attack failed.")
+                        break
+
+                except (FileNotFoundError, json.JSONDecodeError):
+                    pass
+
+                time.sleep(0.5)
 
 ########### Audit and Report page ##########
 

@@ -9,6 +9,21 @@ import itertools
 import msoffcrypto
 from pypdf import PdfReader, PdfWriter
 import concurrent.futures
+import json
+
+def write_recovery_status(progress, state="running", password=None, total_time=0):
+    try:
+        task_data = {
+            "progress":progress,
+            "state": state,
+            "password": password,
+            "time": total_time
+        } 
+        with open("progress.json" , "w") as f:
+            json.dump(task_data, f)
+    except Exception:
+        pass
+
 
 def datetime_patch(self, filetime):
     try:
@@ -45,18 +60,19 @@ def generate_ntlm_hash(password):
 #else:
     #print("Function error.")
 
-def check_individual_password(candidate, target_hash, file_path, file_type):
-    if file_path:
-        if file_type == "word":
-            if check_msword_password(target_hash, candidate):
+def check_password_chunk(candidates_chunk, target_hash, file_path, file_type):
+    for candidate in candidates_chunk:
+        #print(f"Testing: {candidate}")
+        if file_path:
+            if file_type == "word":
+                if check_msword_password(target_hash, candidate):
+                    return candidate
+            elif file_type == "pdf":
+                if check_pdf_password(target_hash, candidate):
+                    return candidate
+        else:
+            if generate_ntlm_hash(candidate) == target_hash:
                 return candidate
-        elif file_type == "pdf":
-            if check_pdf_password(target_hash, candidate):
-                return candidate
-    else:
-        if generate_ntlm_hash(candidate) == target_hash:
-            return candidate
-        
     return None
 
 def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker = None):
@@ -84,11 +100,12 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
     reverse_rule = rules.get("reverse_rule", False)
     capitalize_rule = rules.get("capitalize_rule", False)
 
-    batch_size = 50
+    chunk_size = 5000
+    current_chunk = []
     waiting_list = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-    #with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+    #with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
 
         for index, line in enumerate(wordlist_file):
             try:
@@ -135,27 +152,46 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                     new_variations.extend(append_year(candidate))
                 candidates.extend(new_variations)
 
-            for candidate in candidates:
+            current_chunk.extend(candidates)
+
+            if len(current_chunk) >= chunk_size:
                 #print(f"{candidate}")
-                future = executor.submit(check_individual_password, candidate, target_hash, file_path, file_type)
+                future = executor.submit(check_password_chunk, current_chunk, target_hash, file_path, file_type)
                 waiting_list.append(future)
-
-            if index % batch_size == 0 or index == total_lines - 1:
-
-                for future in concurrent.futures.as_completed(waiting_list):
+                current_chunk = []
+            
+            if len(waiting_list) >= 16:
+                done , not_done = concurrent.futures.wait(waiting_list, return_when=concurrent.futures.FIRST_COMPLETED)
+            else:
+                done , not_done = concurrent.futures.wait(waiting_list, timeout=0)
+                for future in done:
                     result = future.result()
                     if result:
                         executor.shutdown(wait=False, cancel_futures=True)
                         save_to_golden_dictionary(result)
-                        return success_response(result, start_time)
-                    
-                waiting_list = []
+                        duration = time.time() - start_time
+                        write_recovery_status(1.0, state="found", password=result, total_time=duration)
+                        return
 
-                if progress_checker and index % 100 == 0:
-                    progress = min(index / total_lines, 1.0)
-                    progress_checker(progress)
+                waiting_list = list(not_done)
+                progress = min((index + 1) / total_lines, 1.0)
+                write_recovery_status(progress)
+
+        if current_chunk:
+            future = executor.submit(check_password_chunk, current_chunk, target_hash, file_path, file_type)
+            waiting_list.append(future)
+
+        for future in concurrent.futures.as_completed(waiting_list):
+            result = future.result()
+            if result:
+                executor.shutdown(wait=False, cancel_futures=True)
+                save_to_golden_dictionary(result)
+                duration = time.time() - start_time
+                write_recovery_status(1.0, state="found", password=result, total_time=duration)
+                return
                 
-    return {"success" : False, "time" : time.time() - start_time}
+    duration = time.time() - start_time
+    write_recovery_status(1.0, state="failed", total_time=duration)
 
 # target_hash = "8846F7EAEE8FB117AD06BDD830B7586C"
 # file = open("test_wordlist.txt", "rb")
@@ -275,3 +311,17 @@ def check_pdf_password(file_path, password):
             return True
     except:
         return False
+    
+if __name__ == '__main__':
+    try:
+        with open("task.json" , "r") as f:
+            task_data = json.load(f)
+
+        target_hash = task_data["target_hash"]
+        rules = task_data["rules"]
+
+        with open("temporary_wordlist.txt" , "rb") as wordlist_file:
+            dictionary_attack(target_hash, wordlist_file, rules)
+
+    except Exception as e:
+        write_recovery_status(0.0, state="failed")
