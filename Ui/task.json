@@ -1,1 +1,1 @@
-{"target_hash": "cow.docx", "rules": {"append_year": true, "leet_speak": false, "custom_prefix": "", "custom_suffix": "", "capitalize_rule": true, "reverse_rule": true}}
+{"target_hash": "cow.docx", "rules": {"append_year": false, "leet_speak": false, "leet_max_length": 10, "custom_prefix": "", "custom_suffix": "", "capitalize_rule": false, "reverse_rule": false, "custom_code": "def custom_rule(word):\n            return [word,word + word, word + \"?\"]\n  \n            "}}

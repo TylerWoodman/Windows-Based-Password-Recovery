@@ -95,10 +95,21 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
     year_rule = rules.get("append_year", False)
     leet_rule = rules.get("leet_speak", False)
+    leet_max_length = rules.get("leet_max_length", 10)
     custom_prefix = rules.get("custom_prefix", "")
     custom_suffix = rules.get("custom_suffix", "")
     reverse_rule = rules.get("reverse_rule", False)
     capitalize_rule = rules.get("capitalize_rule", False)
+    custom_code = rules.get("custom_code", False)
+
+    if custom_code:
+        try:
+            user_function = {}
+            exec(custom_code, globals(), user_function)
+            if 'custom_rule' in user_function and callable(user_function['custom_rule']):
+                custom_rule_function = user_function['custom_rule']
+        except Exception as error:
+            pass
 
     chunk_size = 5000
     current_chunk = []
@@ -116,7 +127,7 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
             candidates = [base_word]
 
             if leet_rule:
-                leet_variations = leet_speak(base_word)
+                leet_variations = leet_speak(base_word, leet_max_length)
                 for leet in leet_variations:
                     if leet not in candidates:
                         candidates.append(leet)
@@ -152,6 +163,15 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                     new_variations.extend(append_year(candidate))
                 candidates.extend(new_variations)
 
+            if custom_rule_function:
+                custom_variations = []
+                for candidate in candidates:
+                    results_list = custom_rule_function(candidate)
+                    if isinstance(results_list, list):
+                        custom_variations.extend(results_list)
+                        print(results_list)
+                candidates.extend(custom_variations)
+
             current_chunk.extend(candidates)
 
             if len(current_chunk) >= chunk_size:
@@ -164,18 +184,19 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                 done , not_done = concurrent.futures.wait(waiting_list, return_when=concurrent.futures.FIRST_COMPLETED)
             else:
                 done , not_done = concurrent.futures.wait(waiting_list, timeout=0)
-                for future in done:
-                    result = future.result()
-                    if result:
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        save_to_golden_dictionary(result)
-                        duration = time.time() - start_time
-                        write_recovery_status(1.0, state="found", password=result, total_time=duration)
-                        return
+                
+            for future in done:
+                result = future.result()
+                if result:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    save_to_golden_dictionary(result)
+                    duration = time.time() - start_time
+                    write_recovery_status(1.0, state="found", password=result, total_time=duration)
+                    return
 
-                waiting_list = list(not_done)
-                progress = min((index + 1) / total_lines, 1.0)
-                write_recovery_status(progress)
+            waiting_list = list(not_done)
+            progress = min((index + 1) / total_lines, 1.0)
+            write_recovery_status(progress)
 
         if current_chunk:
             future = executor.submit(check_password_chunk, current_chunk, target_hash, file_path, file_type)
@@ -263,7 +284,10 @@ def append_year(word):
         #### print(variations) #####
     return variations
     
-def leet_speak(word):
+def leet_speak(word, max_length = 10):
+    if len(word) > max_length:
+        return[word]
+    
     substitutions = {
         'a':['a','@','4'],
         'b':['b','8'],

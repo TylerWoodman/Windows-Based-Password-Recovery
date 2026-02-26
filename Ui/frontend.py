@@ -207,6 +207,10 @@ elif page == "Attack Page":
             st.write("Select rules to apply to the dictionary:")
             year_rule = st.checkbox("Append Year")
             leet_rule = st.checkbox("Leet Speak Substitution")
+            if leet_rule:
+                leet_max_length = st.slider("Max word length" , min_value = 5 , max_value = 20)
+            else:
+                leet_max_length = 10
             capitalize_rule = st.checkbox("Capitalize First letter")
             reverse_rule = st.checkbox("Reverse word")
 
@@ -219,13 +223,30 @@ elif page == "Attack Page":
             with col_2c:
                 custom_suffix = st.text_input("Add Suffix (end)", placeholder="e.g. !")
 
+            st.markdown("----------------")
+            st.write("Custom Python Rule Creation")
+            custom_code = st.checkbox("Enable Python Script creation")
+            default_custom_code = """def custom_rule(word):
+            return [word + word, word + "?"]
+            # This function takes the base password and returns a list of new variations.
+            # The example above shows duplicating the word and then adding a question mark.
+            """
+
+            if custom_code:
+                st.info("Write a python function named exactly 'def custom_rule(word)'. It must accept a single string 'word' and return a list of strings.")
+                custom_code_input = st.text_area("Python Script" , value = default_custom_code, height = 150)
+            else:
+                custom_code_input = None
+
             current_rules = {
                 "append_year": year_rule,
                 "leet_speak": leet_rule,
+                "leet_max_length": leet_max_length,
                 "custom_prefix": custom_prefix,
                 "custom_suffix": custom_suffix,
                 "capitalize_rule": capitalize_rule,
-                "reverse_rule": reverse_rule
+                "reverse_rule": reverse_rule,
+                "custom_code":custom_code_input
             }
 
     elif attack_type == "Rainbow attack":
