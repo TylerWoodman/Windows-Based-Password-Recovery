@@ -8,6 +8,7 @@ from fpdf import FPDF
 import json
 import subprocess
 import backend
+from google import genai
 
 ########## Navigation sidebar ###########
 
@@ -17,7 +18,14 @@ st.sidebar.header("Case Management 📁")
 case_id = st.sidebar.text_input("Input Case Reference" , "CASE-0012025")
 investigator = st.sidebar.text_input("Input investigator name" , "Woody Woodchip")
 
-page = st.sidebar.radio("Navigation",["Home Page","Hash Page","Attack Page","Recovery Progress Page","Audit and Report Page"])
+page = st.sidebar.radio("Navigation",[
+    "Home Page",
+    "Hash Page",
+    "AI Biographical Dictionary",
+    "Attack Page",
+    "Recovery Progress Page",
+    "Audit and Report Page"
+    ])
 
 st.sidebar.markdown('--------------------')
 if st.sidebar.button("Terminate" , type="primary" , use_container_width=True):
@@ -59,8 +67,8 @@ def log_event(event):
 ########### Home page ##############
 
 if page == "Home Page":
-    st.title("Ai Password Recovery Tool 🔐")
-    st.subheader(f"""Welcome to your Ai Password Recovery Tool!
+    st.title("Windows-Based Password Recovery 🔐")
+    st.subheader(f"""Welcome to Windows-Based Password Recovery!
                  Current case: {case_id}""")
 
     st.markdown("""
@@ -149,6 +157,79 @@ elif page == "Hash Page":
                 st.success("Document saved")
                 log_event(f"Document uploaded : {file_name}")
 
+########### Gemini Biographical Dictionary ##########
+
+elif page == "AI Biographical Dictionary":
+    st.title("AI Biographical Dictionary")
+    st.markdown("""
+Use Open Source Intelligence to generate a highly targeted dictionary.
+The Ai will analyse the suspects biographical profile and generate passwords based on this information.
+                """)
+    
+    with st.expander("Enter Gemini API Key", expanded=True):
+        gemini_api_key = st.text_input("Enter your Google Gemini API Key", type="password")
+        st.caption("You can get a free API Key at https://aistudio.google.com/app/apikey")
+
+    st.markdown("### Suspect's OSINT data")
+
+    with st.form("OSINT_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            target_forename = st.text_input("Target's Forename" , placeholder="e.g. Jack")
+            target_surname = st.text_input("Target's Surname" , placeholder="e.g. Smith")
+            birth_year = st.text_input("Birth Year" , placeholder="e.g. 1982")
+            partner_name = st.text_input("Partner Name" , placeholder="e.g. Sandra")
+        with col2:
+            pets = st.text_input("Pet Names" , placeholder="e.g. Bully , Tyson , violet")
+            company = st.text_input("Company or School" , placeholder="e.g. Microsoft")
+            hobbies = st.text_input("Hobbies / Sports Teams" , placeholder="e.g. Arsenal FC , Guitar")
+        with col3:
+            other = st.text_input("Other information?" , placeholder="e.g. blue , Jurassic Park , Tetris")
+
+        submit_form = st.form_submit_button("Generate Targeted Wordlist", type="primary")
+
+    if submit_form:
+        if not gemini_api_key:
+            st.error("Please enter your Gemini API key first.")
+        else:
+            with st.spinner("Gemini is profiling the target and generating passwords...."):
+                try:
+                    client = genai.Client(api_key=gemini_api_key)
+
+                    prompt = f"""
+                    You are a forensic cyber specialist. I will provide you with open source intelligence about a suspect.
+                    Your job is to generate a list of 500 highly probable base passwords this person might use.
+                    Combine their names, years, pets, and hobbies etc. Use command password patterns, such as capitalizing the first letter or adding numbers at the end.
+
+                    Target Forename = {target_forename}
+                    Target Surname = {target_surname}
+                    Birth Year = {birth_year}
+                    Partner Name = {partner_name}
+                    Pets = {pets}
+                    Company = {company}
+                    Hobbies = {hobbies}
+                    other = {other}
+
+                    IMPORTANT: Output only the passwords, one per line. Do not include any bullet points, numbering, or introductory text. Just provide the passwords. 
+                    """
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt
+                    )
+
+                    wordlist = response.text.strip()
+
+                    file_name = f"OSINT_wordlist_{target_forename}_{target_surname}.txt"
+                    with open(file_name , "w") as f:
+                        f.write(wordlist)
+
+                    st.success(f"Generating OSINT wordlist was a success! Saved as **{file_name}**")
+                    log_event(f"AI generated OSINT wordlist for target: {target_surname}_{target_forename}")
+
+                    with st.expander("Preview Generated Passwords"):
+                        st.code(wordlist)
+                except Exception as e:
+                    st.error(f"AI generation failed: {e}")
 
 ########### Attack selection page ##########
 
@@ -300,17 +381,19 @@ elif page == "Recovery Progress Page":
                 with open("temporary_wordlist.txt" , "wb") as f:
                     wordlist.seek(0)
                     f.write(wordlist.read())
-            
-            st.success("Starting recovery process....")
 
             with open("progress.json" , "w") as f:
                 json.dump({"progress":0.0, "state":"running","password":None, "time": 0}, f)
 
             backend = subprocess.Popen(["python" , "backend.py"])
 
-            progress_bar = st.progress(0.0)
+            start_message = st.empty()
+            progress_container = st.empty()
             status_text = st.empty()
 
+            start_message.info("Starting recovery process....")
+            progress_bar = st.progress(0.0)
+            
             while True:
                 try:
                     with open("progress.json" , "r") as f:
@@ -321,8 +404,9 @@ elif page == "Recovery Progress Page":
                     status_text.text(f"Checking dictionary.... {int(current_progress * 100)}%")
 
                     if progress_status.get("state") == "found":
-                        progress_bar.progress(1.0)
+                        progress_container.empty()
                         status_text.empty()
+                        start_message.empty()
                         st.balloons()
                         st.success("**Password found**")
 
@@ -335,9 +419,14 @@ elif page == "Recovery Progress Page":
                         break
 
                     elif progress_status.get("state") == "failed":
-                        progress_bar.progress(1.0)
+                        progress_container.empty()
                         status_text.empty()
+                        start_message.empty()
                         st.error("Password not found in dictionary.")
+                        
+                        total_time = round(progress_status.get('time' , 0), 4)
+                        st.caption(f"Time taken: {total_time} seconds")
+
                         log_event("Attack failed.")
                         break
 

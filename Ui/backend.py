@@ -102,6 +102,7 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
     capitalize_rule = rules.get("capitalize_rule", False)
     custom_code = rules.get("custom_code", False)
 
+    custom_rule_function = None
     if custom_code:
         try:
             user_function = {}
@@ -110,6 +111,12 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                 custom_rule_function = user_function['custom_rule']
         except Exception as error:
             pass
+
+    #print("------------")
+    #print(f"Target File: {target_hash}")
+    #print(f"File Path: {file_path}")
+    #print(f"File Type: {file_type}")
+    #print("------------")
 
     chunk_size = 5000
     current_chunk = []
@@ -169,7 +176,7 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                     results_list = custom_rule_function(candidate)
                     if isinstance(results_list, list):
                         custom_variations.extend(results_list)
-                        print(results_list)
+                        #print(results_list)
                 candidates.extend(custom_variations)
 
             current_chunk.extend(candidates)
