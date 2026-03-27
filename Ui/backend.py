@@ -133,27 +133,28 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
 
             candidates = [base_word]
 
-            if leet_rule:
-                leet_variations = leet_speak(base_word, leet_max_length)
-                for leet in leet_variations:
-                    if leet not in candidates:
-                        candidates.append(leet)
-            
-            if capitalize_rule:
-                capitalized_items = []
-                for candidate in candidates:
-                    capital = capitalize_password(candidate)
-                    if capital not in candidates:
-                        capitalized_items.append(capital)
-                candidates.extend(capitalized_items)
+            ordered_rules = rules.get("ordered_rules" , [])
 
-            if reverse_rule:
-                reversed_items = []
-                for candidate in candidates:
-                    reversed_word = reverse_password(candidate)
-                    if reversed_word not in candidates:
-                        reversed_items.append(reversed_word)
-                candidates.extend(reversed_items)
+            for rule_name in ordered_rules:
+                current_batch = list(candidates)
+                new_variations = []
+
+                for candidate in current_batch:
+                    if rule_name ==  "Capitalize First Letter":
+                        new_variations.append(capitalize_password(candidate))
+                    elif rule_name == "Reverse Word":
+                        new_variations.append(reverse_password(candidate))
+                    elif rule_name == "Append Year":
+                        new_variations.extend(append_year(candidate))
+                    elif rule_name == "Leet Speak Substitution":
+                        leet_max_length = rules.get("leet_max_length" , 10)
+                        new_variations.extend(leet_speak(candidate, leet_max_length)) 
+
+                for item in new_variations:
+                    if item not in candidates:
+                        candidates.append(item)
+
+                #print(f"{rule_name}:{candidates}")
 
             if custom_prefix or custom_suffix:
                 prefix = custom_prefix if custom_prefix else ""
@@ -163,12 +164,6 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                 for candidate in candidates:
                     add_to_existing.append(f"{prefix}{candidate}{suffix}")
                 candidates.extend(add_to_existing)
-
-            if year_rule:
-                new_variations = []
-                for candidate in candidates:
-                    new_variations.extend(append_year(candidate))
-                candidates.extend(new_variations)
 
             if custom_rule_function:
                 custom_variations = []

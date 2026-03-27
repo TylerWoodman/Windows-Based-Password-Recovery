@@ -286,14 +286,25 @@ elif page == "Attack Page":
 
         with st.expander("Rule Selection"):
             st.write("Select rules to apply to the dictionary:")
-            year_rule = st.checkbox("Append Year")
-            leet_rule = st.checkbox("Leet Speak Substitution")
-            if leet_rule:
+
+            rules = [
+                "Capitalize First Letter",
+                "Reverse Word",
+                "Leet Speak Substitution",
+                "Append Year"
+            ]
+
+            selected_rules = st.multiselect(
+                "Select and Order Rules:",
+                options = rules,
+                default = ["Capitalize First Letter" , "Append Year"],
+                help = "Click the rules in the order you want them applied."
+            )
+
+            if "Leet Speak Substitution" in selected_rules:
                 leet_max_length = st.slider("Max word length" , min_value = 5 , max_value = 20)
             else:
                 leet_max_length = 10
-            capitalize_rule = st.checkbox("Capitalize First letter")
-            reverse_rule = st.checkbox("Reverse word")
 
             st.markdown("-----------------")
             st.write('Custom User Rules')
@@ -320,13 +331,10 @@ elif page == "Attack Page":
                 custom_code_input = None
 
             current_rules = {
-                "append_year": year_rule,
-                "leet_speak": leet_rule,
+                "ordered_rules": selected_rules,
                 "leet_max_length": leet_max_length,
                 "custom_prefix": custom_prefix,
                 "custom_suffix": custom_suffix,
-                "capitalize_rule": capitalize_rule,
-                "reverse_rule": reverse_rule,
                 "custom_code":custom_code_input
             }
 
