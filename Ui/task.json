@@ -1,1 +1,1 @@
-{"target_hash": "cow.docx", "rules": {"ordered_rules": ["Reverse Word", "Leet Speak Substitution", "Append Year", "Capitalize First Letter"], "leet_max_length": 5, "custom_prefix": "", "custom_suffix": "", "custom_code": null}}
+{"target_hash": "cow.docx", "rules": {"ordered_rules": ["Capitalize First Letter", "Append Year"], "leet_max_length": 10, "custom_prefix": "", "custom_suffix": "", "custom_code": null}}

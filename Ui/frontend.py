@@ -9,6 +9,7 @@ import json
 import subprocess
 import backend
 from google import genai
+import os
 
 ########## Navigation sidebar ###########
 
@@ -268,13 +269,27 @@ elif page == "Attack Page":
 
     elif attack_type == "Dictionary-based":
         st.subheader("Dictionary attack settings")
-
-        dictionary_source = st.radio("Select Dictionary Source:" , ["Upload Wordlist" , "Use Golden Dictionary"])
+        dictionary_source = st.radio("Select Dictionary Source:" , ["Upload Wordlist" , "Use Built-in Wordlist" ,"Use Golden Dictionary"])
         if dictionary_source == "Upload Wordlist":
             uploaded_dictionary = st.file_uploader("Upload wordlist")
             if uploaded_dictionary is not None:
                 st.session_state['wordlist_file'] = uploaded_dictionary
                 st.success("Dictionary loaded successfully.")
+
+        elif dictionary_source == "Use Built-in Wordlist":
+            if not os.path.exists("wordlists"):
+                os.makedirs("wordlists")
+                st.warning("Created 'wordlists' folder. It is currently empty, add some .txt wordlists!")
+            
+            available_wordlists = [file for file in os.listdir("wordlists") if file.endswith('.txt')]
+
+            if available_wordlists:
+                selected_wordlist = st.selectbox("Choose a built-in dictionary:" , available_wordlists)
+                if st.button("Load Load Built-in Dictionary"):
+                    st.session_state['wordlist_file'] = open(os.path.join("wordlists" , selected_wordlist), "rb")
+                    st.success(f"Loaded Built-in dictionary: {selected_wordlist}")
+            else:
+                st.error("No .txt files found in the 'wordlists' folder.")
 
         elif dictionary_source == "Use Golden Dictionary":
             if st.button("Load Golden Dictionary"):
