@@ -10,6 +10,7 @@ import subprocess
 import backend
 from google import genai
 import os
+import sqlite3
 
 ########## Navigation sidebar ###########
 
@@ -61,8 +62,34 @@ if 'audit_log' not in st.session_state:
 if 'target_hashes' not in st.session_state:
     st.session_state['target_hashes'] = []
 
+def initalize_database():
+    con = sqlite3.connect("forensic_audit.db")
+    cur = con.cursor()
+    cur.execute('''CREATE TABLE IF NOT EXISTS Audit_Logs(
+                id integer primary key,
+                case_reference TEXT,
+                investigator TEXT,
+                timestamp TEXT,
+                event TEXT
+                )''')
+    con.commit()
+    con.close()
+
+initalize_database()
+
 def log_event(event):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        con = sqlite3.connect("forensic_audit.db")
+        cur = con.cursor()
+        cur.execute("INSERT INTO Audit_Logs(case_reference , investigator , timestamp , event) " \
+        "VALUES (?, ?, ?, ?)",
+        (case_id , investigator , timestamp , event))
+        con.commit()
+        con.close()
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+
     st.session_state['audit_log'].append({"Time" : timestamp, "Event" : event})
     
 ########### Home page ##############
@@ -462,6 +489,25 @@ elif page == "Recovery Progress Page":
 
 elif page == "Audit and Report Page":
     st.title("Forensic Audit Log")
+
+    with st.expander("Case History" , expanded=False):
+        case_query = st.text_input("Search by case reference:", value=case_id)
+
+        if st.button("Fetch Records"):
+            try:
+                con = sqlite3.connect("forensic_audit.db")
+                query = f"SELECT timestamp, investigator, event FROM Audit_Logs WHERE case_reference = ?"
+
+                database_logs = pd.read_sql_query(query, con, params=(case_query,))
+                con.close()
+
+                if not database_logs.empty:
+                    st.success(f"Found {len(database_logs)} records for {case_query}")
+                    st.dataframe(database_logs, use_container_width=True, hide_index=True)
+                else:
+                    st.warning(f"No database records found for {case_query}")
+            except Exception as e:
+                st.error(f"Failed to read database: {e}")
 
     if st.session_state['audit_log']:
         dataframe_log = pd.DataFrame(st.session_state['audit_log'])
