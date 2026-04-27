@@ -24,6 +24,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Pytest
+      working-directory: ./Ui
       run: |
         pytest test_backend.py test_database.py test_ui.py -v
        
