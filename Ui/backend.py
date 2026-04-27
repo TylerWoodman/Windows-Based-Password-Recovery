@@ -201,6 +201,8 @@ def dictionary_attack(target_hash, wordlist_file, rules = None, progress_checker
                         #print(results_list)
                 candidates.extend(custom_variations)
 
+            #print(f"Base Word: '{base_word}' | Testing {len(candidates)} variations: {candidates}")
+
             current_chunk.extend(candidates)
 
             if len(current_chunk) >= chunk_size:

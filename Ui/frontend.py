@@ -64,6 +64,11 @@ if 'target_hashes' not in st.session_state:
     st.session_state['target_hashes'] = []
 
 database.initalize_database()
+
+def log_event(event_text):
+    timestamp = database.log_event(case_id, investigator, event_text)
+    if timestamp:
+        st.session_state['audit_log'].append({"Time" : timestamp, "Event" : event_text})
     
 ########### Home page ##############
 
@@ -129,7 +134,7 @@ elif page == "Hash Page":
                                 st.code(f"User = {username} , Hash = {NTLM_hash}" , language="yaml")
                                 st.session_state['target_hashes'].append(NTLM_hash)
 
-                        database.log_event("Extracted NTLM hash from windows artifact")
+                        log_event("Extracted NTLM hash from windows artifact")
 
     #with tab3:
         #hash_input = st.text_input("Input hash")
@@ -156,7 +161,7 @@ elif page == "Hash Page":
                     f.write(document_upload.getbuffer())
                 st.session_state['target_hashes'].append(f"{file_name}")
                 st.success("Document saved")
-                database.log_event(f"Document uploaded : {file_name}")
+                log_event(f"Document uploaded : {file_name}")
 
 ########### Gemini Biographical Dictionary ##########
 
@@ -195,14 +200,24 @@ The Ai will analyse the suspects biographical profile and generate passwords bas
         else:
             with st.spinner("Gemini is profiling the target and generating passwords...."):
                 try:
-                    wordlist = backend.generate_osint_wordlist()
+                    wordlist = backend.generate_osint_wordlist(
+                        gemini_api_key,
+                        target_forename,
+                        target_surname,
+                        birth_year,
+                        partner_name,
+                        pets,
+                        company,
+                        hobbies,
+                        other
+                    )
 
                     file_name = f"OSINT_wordlist_{target_forename}_{target_surname}.txt"
                     with open(file_name , "w") as f:
                         f.write(wordlist)
 
                     st.success(f"Generating OSINT wordlist was a success! Saved as **{file_name}**")
-                    database.log_event(f"AI generated OSINT wordlist for target: {target_surname}_{target_forename}")
+                    log_event(f"AI generated OSINT wordlist for target: {target_surname}_{target_forename}")
 
                     with st.expander("Preview Generated Passwords"):
                         st.code(wordlist)
@@ -341,7 +356,7 @@ elif page == "Attack Page":
             st.session_state['attack_rules'] = {}
 
         st.success(f"Configuration saved: {attack_type}")
-        database.log_event(f"Attack configured: {attack_type}")
+        log_event(f"Attack configured: {attack_type}")
         
 ########### Recovery Progress ###########
 
@@ -415,7 +430,7 @@ elif page == "Recovery Progress Page":
 
                         st.metric("Password found" , password)
                         st.caption(f"Time taken: {total_time} seconds")
-                        database.log_event(f"Success: Recovered {password}")
+                        log_event(f"Success: Recovered {password}")
                         break
 
                     elif progress_status.get("state") == "failed":
@@ -427,7 +442,7 @@ elif page == "Recovery Progress Page":
                         total_time = round(progress_status.get('time' , 0), 4)
                         st.caption(f"Time taken: {total_time} seconds")
 
-                        database.log_event("Attack failed.")
+                        log_event("Attack failed.")
                         break
 
                 except (FileNotFoundError, json.JSONDecodeError):

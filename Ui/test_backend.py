@@ -13,8 +13,8 @@ def test_reverse_password():
     assert backend.reverse_password("lake") == "ekal"
 
 def test_generate_ntlm_hash():
-    ntlm_expected_hash = "8A9D093F14F8701DF17732B2BB182C74"
-    assert backend.generate_ntlm_hash("password") == ntlm_expected_hash
+    ntlm_expected_hash = "A4F49C406510BDCAB6824EE7C30FD852"
+    assert backend.generate_ntlm_hash("Password") == ntlm_expected_hash
 
 def test_leet_speak():
     leet_speak_results = backend.leet_speak("cat")
