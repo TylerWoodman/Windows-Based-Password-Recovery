@@ -8,6 +8,7 @@ from fpdf import FPDF
 import json
 import subprocess
 import backend
+import database
 from google import genai
 import os
 import sqlite3
@@ -62,35 +63,7 @@ if 'audit_log' not in st.session_state:
 if 'target_hashes' not in st.session_state:
     st.session_state['target_hashes'] = []
 
-def initalize_database():
-    con = sqlite3.connect("forensic_audit.db")
-    cur = con.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS Audit_Logs(
-                id integer primary key,
-                case_reference TEXT,
-                investigator TEXT,
-                timestamp TEXT,
-                event TEXT
-                )''')
-    con.commit()
-    con.close()
-
-initalize_database()
-
-def log_event(event):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        con = sqlite3.connect("forensic_audit.db")
-        cur = con.cursor()
-        cur.execute("INSERT INTO Audit_Logs(case_reference , investigator , timestamp , event) " \
-        "VALUES (?, ?, ?, ?)",
-        (case_id , investigator , timestamp , event))
-        con.commit()
-        con.close()
-    except Exception as e:
-        st.error(f"Database Error: {e}")
-
-    st.session_state['audit_log'].append({"Time" : timestamp, "Event" : event})
+database.initalize_database()
     
 ########### Home page ##############
 
@@ -121,12 +94,12 @@ elif page == "Hash Page":
     st.title("Upload hash evidence #️⃣")
     st.write("Upload a hash list, windows artifact, document , or enter a hash manually!")
 
-    tab1,tab2,tab3,tab4 = st.tabs(["Hash lists" , "Windows Artifacts" , "Manual entry" , "Document upload"])
+    tab1,tab2 = st.tabs(["Windows Artifacts" , "Document upload"])
+
+    #with tab1:
+        #hash_file = st.file_uploader("Upload a hash file" , type = ['txt','csv'])
 
     with tab1:
-        hash_file = st.file_uploader("Upload a hash file" , type = ['txt','csv'])
-
-    with tab2:
         col1,col2 = st.columns(2)
         with col1:
             SAM_file = st.file_uploader("Upload SAM file" , key="sam")
@@ -156,21 +129,21 @@ elif page == "Hash Page":
                                 st.code(f"User = {username} , Hash = {NTLM_hash}" , language="yaml")
                                 st.session_state['target_hashes'].append(NTLM_hash)
 
-                        log_event("Extracted NTLM hash from windows artifact")
+                        database.log_event("Extracted NTLM hash from windows artifact")
 
-    with tab3:
-        hash_input = st.text_input("Input hash")
-        col1,col2 = st.columns(2)
-        with col1:
-            hash_type = st.selectbox("Hash type",["MD5","SHA-256","NTLM","MS Office 2013"])
-        with col2:
-            salt_format = st.selectbox("Salt format",["Unsalted","hash:salt","salt:hash","hash:salt:pass"])
-        if st.button("Save input"):
-            st.session_state['target_hashes'].append(f"{hash_type} - {hash_input}")
-            st.success("Hash input saved")
-            log_event(f"Manual input: {hash_type} (Format: {salt_format})")
+    #with tab3:
+        #hash_input = st.text_input("Input hash")
+        #col1,col2 = st.columns(2)
+        #with col1:
+        #    hash_type = st.selectbox("Hash type",["MD5","SHA-256","NTLM","MS Office 2013"])
+        #with col2:
+        #    salt_format = st.selectbox("Salt format",["Unsalted","hash:salt","salt:hash","hash:salt:pass"])
+        #if st.button("Save input"):
+        #    st.session_state['target_hashes'].append(f"{hash_type} - {hash_input}")
+        #    st.success("Hash input saved")
+        #    log_event(f"Manual input: {hash_type} (Format: {salt_format})")
     
-    with tab4:
+    with tab2:
         st.subheader("Extract hash from a document")
         st.info("Supported formats include: MS Word (.docx) , Excel (.xlsx) , PDF")
         document_upload = st.file_uploader("Upload a document" , type = ['docx','xlsx','PDF'])
@@ -183,7 +156,7 @@ elif page == "Hash Page":
                     f.write(document_upload.getbuffer())
                 st.session_state['target_hashes'].append(f"{file_name}")
                 st.success("Document saved")
-                log_event(f"Document uploaded : {file_name}")
+                database.log_event(f"Document uploaded : {file_name}")
 
 ########### Gemini Biographical Dictionary ##########
 
@@ -222,37 +195,14 @@ The Ai will analyse the suspects biographical profile and generate passwords bas
         else:
             with st.spinner("Gemini is profiling the target and generating passwords...."):
                 try:
-                    client = genai.Client(api_key=gemini_api_key)
-
-                    prompt = f"""
-                    You are a forensic cyber specialist. I will provide you with open source intelligence about a suspect.
-                    Your job is to generate a list of 500 highly probable base passwords this person might use.
-                    Combine their names, years, pets, and hobbies etc. Use command password patterns, such as capitalizing the first letter or adding numbers at the end.
-
-                    Target Forename = {target_forename}
-                    Target Surname = {target_surname}
-                    Birth Year = {birth_year}
-                    Partner Name = {partner_name}
-                    Pets = {pets}
-                    Company = {company}
-                    Hobbies = {hobbies}
-                    other = {other}
-
-                    IMPORTANT: Output only the passwords, one per line. Do not include any bullet points, numbering, or introductory text. Just provide the passwords. 
-                    """
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt
-                    )
-
-                    wordlist = response.text.strip()
+                    wordlist = backend.generate_osint_wordlist()
 
                     file_name = f"OSINT_wordlist_{target_forename}_{target_surname}.txt"
                     with open(file_name , "w") as f:
                         f.write(wordlist)
 
                     st.success(f"Generating OSINT wordlist was a success! Saved as **{file_name}**")
-                    log_event(f"AI generated OSINT wordlist for target: {target_surname}_{target_forename}")
+                    database.log_event(f"AI generated OSINT wordlist for target: {target_surname}_{target_forename}")
 
                     with st.expander("Preview Generated Passwords"):
                         st.code(wordlist)
@@ -391,7 +341,7 @@ elif page == "Attack Page":
             st.session_state['attack_rules'] = {}
 
         st.success(f"Configuration saved: {attack_type}")
-        log_event(f"Attack configured: {attack_type}")
+        database.log_event(f"Attack configured: {attack_type}")
         
 ########### Recovery Progress ###########
 
@@ -465,7 +415,7 @@ elif page == "Recovery Progress Page":
 
                         st.metric("Password found" , password)
                         st.caption(f"Time taken: {total_time} seconds")
-                        log_event(f"Success: Recovered {password}")
+                        database.log_event(f"Success: Recovered {password}")
                         break
 
                     elif progress_status.get("state") == "failed":
@@ -477,7 +427,7 @@ elif page == "Recovery Progress Page":
                         total_time = round(progress_status.get('time' , 0), 4)
                         st.caption(f"Time taken: {total_time} seconds")
 
-                        log_event("Attack failed.")
+                        database.log_event("Attack failed.")
                         break
 
                 except (FileNotFoundError, json.JSONDecodeError):

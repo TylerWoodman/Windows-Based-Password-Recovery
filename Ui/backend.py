@@ -10,6 +10,33 @@ import msoffcrypto
 from pypdf import PdfReader, PdfWriter
 import concurrent.futures
 import json
+from google import genai
+
+def generate_osint_wordlist(gemini_api_key, target_forename, target_surname, birth_year, partner_name, pets, company, hobbies, other):
+    prompt = f"""
+                You are a forensic cyber specialist. I will provide you with open source intelligence about a suspect.
+                Your job is to generate a list of 500 highly probable base passwords this person might use.
+                Combine their names, years, pets, and hobbies etc. Use command password patterns, such as capitalizing the first letter or adding numbers at the end.
+
+                Target Forename = {target_forename}
+                Target Surname = {target_surname}
+                Birth Year = {birth_year}
+                Partner Name = {partner_name}
+                Pets = {pets}
+                Company = {company}
+                Hobbies = {hobbies}
+                other = {other}
+
+                IMPORTANT: Output only the passwords, one per line. Do not include any bullet points, numbering, or introductory text. Just provide the passwords. 
+                """
+    
+    client = genai.Client(api_key=gemini_api_key)
+    response = client.models.generate_content(
+    model='gemini-2.5-flash',
+    contents=prompt
+)
+    
+    return response.text.strip()
 
 def write_recovery_status(progress, state="running", password=None, total_time=0):
     try:
