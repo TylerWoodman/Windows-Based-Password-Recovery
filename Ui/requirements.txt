@@ -51,12 +51,12 @@ pillow==12.0.0
 pluggy==1.6.0
 proto-plus==1.27.1
 protobuf==5.29.6
-psutil @ file:///C:/miniconda3/conda-bld/psutil_1761896536656/work
+psutil
 pyarrow==21.0.0
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
 pycparser==2.23
-pycryptodome @ file:///D:/bld/pycryptodome_1759429715142/work
+pycryptodome 
 pycryptodomex==3.23.0
 pydantic==2.12.5
 pydantic_core==2.41.5
