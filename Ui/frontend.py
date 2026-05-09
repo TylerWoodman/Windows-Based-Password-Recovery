@@ -21,6 +21,10 @@ st.sidebar.header("Case Management 📁")
 case_id = st.sidebar.text_input("Input Case Reference" , "CASE-0012025")
 investigator = st.sidebar.text_input("Input investigator name" , "Woody Woodchip")
 
+if 'redirect_to' in st.session_state:
+    st.session_state['navigation'] = st.session_state['redirect_to']
+    del st.session_state['redirect_to']
+
 page = st.sidebar.radio("Navigation",[
     "Home Page",
     "Hash Page",
@@ -28,10 +32,11 @@ page = st.sidebar.radio("Navigation",[
     "Attack Page",
     "Recovery Progress Page",
     "Audit and Report Page"
-    ])
+    ], key="navigation")
 
 st.sidebar.markdown('--------------------')
-if st.sidebar.button("Terminate" , type="primary" , use_container_width=True):
+confirm_termination = st.sidebar.checkbox("Confirm termination of backend processes")
+if st.sidebar.button("Terminate" , type="primary" , use_container_width=True, disabled=not confirm_termination):
     with st.spinner("Terminating processes..."):
         terminated = 0
         for process in psutil.process_iter(['pid' , 'name' , 'cmdline']):
@@ -57,6 +62,10 @@ if st.sidebar.button("Terminate" , type="primary" , use_container_width=True):
         else:
             st.sidebar.info("No backend processes to terminate.")
 
+if st.session_state.get('attack_in_progress', False):
+    st.sidebar.markdown("--------------------")
+    with st.sidebar.status("Attack in progress...", expanded=False):
+        st.write("Navigate to the Recovery Progress Page to view recovery status.")
  
 if 'audit_log' not in st.session_state:
     st.session_state['audit_log'] = []
@@ -212,7 +221,9 @@ The Ai will analyse the suspects biographical profile and generate passwords bas
                         other
                     )
 
-                    file_name = f"OSINT_wordlist_{target_forename}_{target_surname}.txt"
+                    os.makedirs("wordlists", exist_ok=True)
+
+                    file_name = f"wordlists/OSINT_wordlist_{target_forename}_{target_surname}.txt"
                     with open(file_name , "w") as f:
                         f.write(wordlist)
 
@@ -261,14 +272,14 @@ elif page == "Attack Page":
 
     elif attack_type == "Dictionary-based":
         st.subheader("Dictionary attack settings")
-        dictionary_source = st.radio("Select Dictionary Source:" , ["Upload Wordlist" , "Use Built-in Wordlist" ,"Use Golden Dictionary"])
+        dictionary_source = st.radio("Select Dictionary Source:" , ["Upload Wordlists" , "Use Built-in Wordlists" ,"Use Golden Dictionary"])
         if dictionary_source == "Upload Wordlist":
-            uploaded_dictionary = st.file_uploader("Upload wordlist")
-            if uploaded_dictionary is not None:
-                st.session_state['wordlist_file'] = uploaded_dictionary
-                st.success("Dictionary loaded successfully.")
+            uploaded_dictionaries = st.file_uploader("Upload wordlists", accept_multiple_files=True)
+            if uploaded_dictionaries:
+                st.session_state['wordlist_files'] = uploaded_dictionaries
+                st.success(f"{len(uploaded_dictionaries)} wordlists loaded successfully.")
 
-        elif dictionary_source == "Use Built-in Wordlist":
+        elif dictionary_source == "Use Built-in Wordlists":
             if not os.path.exists("wordlists"):
                 os.makedirs("wordlists")
                 st.warning("Created 'wordlists' folder. It is currently empty, add some .txt wordlists!")
@@ -276,17 +287,18 @@ elif page == "Attack Page":
             available_wordlists = [file for file in os.listdir("wordlists") if file.endswith('.txt')]
 
             if available_wordlists:
-                selected_wordlist = st.selectbox("Choose a built-in dictionary:" , available_wordlists)
-                if st.button("Load Load Built-in Dictionary"):
-                    st.session_state['wordlist_file'] = open(os.path.join("wordlists" , selected_wordlist), "rb")
-                    st.success(f"Loaded Built-in dictionary: {selected_wordlist}")
+                selected_wordlists = st.multiselect("Choose built-in dictionaries:" , available_wordlists)
+                if st.button("Load Built-in Dictionaries"):
+                    if selected_wordlists:
+                        st.session_state['wordlist_files'] = [open(os.path.join("wordlists" , wordlist), "rb") for wordlist in selected_wordlists]
+                        st.success(f"Loaded {len(selected_wordlists)} Built-in dictionaries.")
             else:
-                st.error("No .txt files found in the 'wordlists' folder.")
+                st.warning("Please select at least one built-in dictionary.")
 
         elif dictionary_source == "Use Golden Dictionary":
             if st.button("Load Golden Dictionary"):
                 try:
-                    st.session_state['wordlist_file'] = open("golden_dictionary.txt" , "rb")
+                    st.session_state['wordlist_files'] = [open("golden_dictionary.txt" , "rb")]
                     st.success("Golden Dictionary loaded.")
                 except FileNotFoundError:
                     st.error("No golden dictionary found. Have you cracked any passwords yet?")
@@ -334,6 +346,22 @@ elif page == "Attack Page":
             if custom_code:
                 st.info("Write a python function named exactly 'def custom_rule(word)'. It must accept a single string 'word' and return a list of strings.")
                 custom_code_input = st.text_area("Python Script" , value = default_custom_code, height = 150)
+
+                if st.button("Test Python Script"):
+                    try:
+                        user_function = {}
+                        exec(custom_code_input, globals(), user_function)
+
+                        if 'custom_rule' in user_function:
+                            test_word = "password"
+                            result = user_function['custom_rule'](test_word)
+
+                            if isinstance(result, list):
+                                st.success(f"Function successfully executed. The base word '{test_word}' was transformed into: {result}")
+                            else:
+                                st.warning(f"Your function executed but did not return a list. It returned a '{type(result).__name__}' instead.")
+                    except Exception as e:
+                        st.error(f"Error in custom script: {e}")
             else:
                 custom_code_input = None
 
@@ -348,7 +376,7 @@ elif page == "Attack Page":
     elif attack_type == "Rainbow attack":
         st.subheader("Rainbow attack")
 
-    if st.button("Save attack configuration"):
+    if st.button("Save & Go to Progress Page", type="primary"):
         st.session_state['attack_config'] = attack_type
         if attack_type == "Dictionary-based":
             st.session_state['attack_rules'] = current_rules
@@ -357,6 +385,9 @@ elif page == "Attack Page":
 
         st.success(f"Configuration saved: {attack_type}")
         log_event(f"Attack configured: {attack_type}")
+
+        st.session_state['redirect_to'] = "Recovery Progress Page"
+        st.rerun()
         
 ########### Recovery Progress ###########
 
@@ -380,12 +411,12 @@ elif page == "Recovery Progress Page":
     if st.button("Start attack"):
         rules_configuration = st.session_state.get('attack_rules', {})
 
-        if 'wordlist_file' not in st.session_state:
-            st.error("No dictionary found. Please go back to the attack page and upload a file.")
+        if 'wordlist_files' not in st.session_state or not st.session_state['wordlist_files']:
+            st.error("No dictionaries found. Please go back to the attack page and load your wordlists.")
         else:
-            wordlist = st.session_state['wordlist_file']
+            wordlists = st.session_state['wordlist_files']
 
-            with st.spinner("Preparing uploaded files..."):
+            with st.spinner("Preparing and combining uploaded files..."):
                 task_data = {
                     "target_hash": target_hash,
                     "rules": rules_configuration
@@ -394,61 +425,59 @@ elif page == "Recovery Progress Page":
                     json.dump(task_data, f)
 
                 with open("temporary_wordlist.txt" , "wb") as f:
-                    wordlist.seek(0)
-                    f.write(wordlist.read())
+                    for wordlist in wordlists:
+                        wordlist.seek(0)
+                        f.write(wordlist.read())
+                        f.write(b"\n")
 
             with open("progress.json" , "w") as f:
                 json.dump({"progress":0.0, "state":"running","password":None, "time": 0}, f)
 
             backend = subprocess.Popen(["python" , "backend.py"])
 
-            start_message = st.empty()
-            progress_container = st.empty()
-            status_text = st.empty()
+            st.session_state['attack_in_progress'] = True
+            st.rerun()
 
-            start_message.info("Starting recovery process....")
-            progress_bar = st.progress(0.0)
+    if st.session_state.get('attack_in_progress', False):
+        st.info("Starting recovery process....")
+
+        try:
+            with open("progress.json", "r") as f:
+                progress_status = json.load(f)
+
+            current_progress = progress_status.get("progress", 0.0)
+            st.progress(current_progress)
+            st.text(f"Checking dictionary.... {int(current_progress * 100)}%")
+
+            if progress_status.get("state") == "found":
+                st.balloons()
+                st.success("**Password found**")
+
+                password = progress_status.get('password')
+                total_time = round(progress_status.get('time', 0), 4)
+
+                st.metric("Password found" , password)
+                st.caption(f"Time taken: {total_time} seconds")
+                log_event(f"Success: Recovered {password} for hash {target_hash} in {total_time} seconds.")
+
+                st.session_state['attack_in_progress'] = False
             
-            while True:
-                try:
-                    with open("progress.json" , "r") as f:
-                        progress_status = json.load(f)
+            elif progress_status.get("state") == "failed":
+                st.error("Password not found in dictionary.")
 
-                    current_progress = progress_status.get("progress", 0.0)
-                    progress_bar.progress(current_progress)
-                    status_text.text(f"Checking dictionary.... {int(current_progress * 100)}%")
+                total_time = round(progress_status.get('time' , 0), 4)
+                st.caption(f"Time taken: {total_time} seconds")
+                log_event(f"Failed: Could not recover password for hash {target_hash}.")
 
-                    if progress_status.get("state") == "found":
-                        progress_container.empty()
-                        status_text.empty()
-                        start_message.empty()
-                        st.balloons()
-                        st.success("**Password found**")
+                st.session_state['attack_in_progress'] = False
+            
+            else:
+                time.sleep(1.0)
+                st.rerun()
 
-                        password = progress_status.get('password')
-                        total_time = round(progress_status.get('time' , 0), 4)
-
-                        st.metric("Password found" , password)
-                        st.caption(f"Time taken: {total_time} seconds")
-                        log_event(f"Success: Recovered {password}")
-                        break
-
-                    elif progress_status.get("state") == "failed":
-                        progress_container.empty()
-                        status_text.empty()
-                        start_message.empty()
-                        st.error("Password not found in dictionary.")
-                        
-                        total_time = round(progress_status.get('time' , 0), 4)
-                        st.caption(f"Time taken: {total_time} seconds")
-
-                        log_event("Attack failed.")
-                        break
-
-                except (FileNotFoundError, json.JSONDecodeError):
-                    pass
-
-                time.sleep(0.5)
+        except (FileNotFoundError, json.JSONDecodeError):
+            time.sleep(1.0)
+            st.rerun()
 
 ########### Audit and Report page ##########
 
