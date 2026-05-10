@@ -12,10 +12,10 @@ import concurrent.futures
 import json
 from google import genai
 
-def generate_osint_wordlist(gemini_api_key, target_forename, target_surname, birth_year, partner_name, pets, company, hobbies, other):
+def generate_osint_wordlist(gemini_api_key, target_forename, target_surname, birth_year, partner_name, pets, company, hobbies, other, word_count):
     prompt = f"""
                 You are a forensic cyber specialist. I will provide you with open source intelligence about a suspect.
-                Your job is to generate a list of 500 highly probable base passwords this person might use.
+                Your job is to generate a list of {word_count} highly probable base passwords this person might use.
                 Combine their names, years, pets, and hobbies etc. Use command password patterns, such as capitalizing the first letter or adding numbers at the end.
 
                 Target Forename = {target_forename}

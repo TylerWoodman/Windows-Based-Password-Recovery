@@ -17,7 +17,7 @@ def test_navigation_and_attack_configuration():
     at.radio[0].set_value("Dictionary-based").run()
 
     for button in at.button:
-        if button.label == "Save attack configuration":
+        if button.label == "Save & Go to Progress Page":
             button.click().run()
             break
     

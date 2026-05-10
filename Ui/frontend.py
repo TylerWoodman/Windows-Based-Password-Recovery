@@ -158,7 +158,7 @@ elif page == "Hash Page":
         #    log_event(f"Manual input: {hash_type} (Format: {salt_format})")
     
     with tab2:
-        st.subheader("Extract hash from a document")
+        st.subheader("Queue document for password extraction.")
         st.info("Supported formats include: MS Word (.docx) , Excel (.xlsx) , PDF")
         document_upload = st.file_uploader("Upload a document" , type = ['docx','xlsx','PDF'])
 
@@ -166,11 +166,14 @@ elif page == "Hash Page":
             file_name = document_upload.name
 
             if st.button("Add to target list"):
-                with open(file_name, "wb") as f:
-                    f.write(document_upload.getbuffer())
-                st.session_state['target_hashes'].append(f"{file_name}")
-                st.success("Document saved")
-                log_event(f"Document uploaded : {file_name}")
+                if file_name in st.session_state['target_hashes']:
+                    st.warning(f"{file_name} is already in the target list.")
+                else:
+                    with open(file_name, "wb") as f:
+                        f.write(document_upload.getbuffer())
+                    st.session_state['target_hashes'].append(f"{file_name}")
+                    st.success("Document saved")
+                    log_event(f"Document uploaded : {file_name}")
 
 ########### Gemini Biographical Dictionary ##########
 
@@ -201,6 +204,16 @@ The Ai will analyse the suspects biographical profile and generate passwords bas
         with col3:
             other = st.text_input("Other information?" , placeholder="e.g. blue , Jurassic Park , Tetris")
 
+        st.markdown("### Generation Settings")
+        word_count = st.slider(
+            "Dictionary Size (Number of Words)",
+            min_value = 50,
+            max_value = 2000,
+            value = 500,
+            step = 50,
+            help="Lower numbers will generate higher accuracy guesses, whereas higher number may result in AI hallucinations."
+        )
+
         submit_form = st.form_submit_button("Generate Targeted Wordlist", type="primary")
 
     if submit_form:
@@ -218,7 +231,8 @@ The Ai will analyse the suspects biographical profile and generate passwords bas
                         pets,
                         company,
                         hobbies,
-                        other
+                        other,
+                        word_count
                     )
 
                     os.makedirs("wordlists", exist_ok=True)
@@ -316,12 +330,18 @@ elif page == "Attack Page":
             selected_rules = st.multiselect(
                 "Select and Order Rules:",
                 options = rules,
-                default = ["Capitalize First Letter" , "Append Year"],
+                default = [],
                 help = "Click the rules in the order you want them applied."
             )
 
+            if selected_rules:
+                rule_chain = " -> ".join(selected_rules)
+                st.info(f"Selected rules will be applied in the following order: {rule_chain}")
+            else:
+                st.info("No rules selected. The attack will use the base dictionary words without mutations.")
+
             if "Leet Speak Substitution" in selected_rules:
-                leet_max_length = st.slider("Max word length" , min_value = 5 , max_value = 20)
+                leet_max_length = st.number_input("Max leet speak word length" , min_value = 5 , max_value = 20, value = 10, step = 1)
             else:
                 leet_max_length = 10
 
@@ -484,36 +504,54 @@ elif page == "Recovery Progress Page":
 elif page == "Audit and Report Page":
     st.title("Forensic Audit Log")
 
+    if 'fetched_logs' not in st.session_state:
+        st.session_state['fetched_logs'] = None
+        st.session_state['fetched_case'] = case_id
+
     with st.expander("Case History" , expanded=False):
         case_query = st.text_input("Search by case reference:", value=case_id)
 
         if st.button("Fetch Records"):
             try:
                 con = sqlite3.connect("forensic_audit.db")
-                query = f"SELECT timestamp, investigator, event FROM Audit_Logs WHERE case_reference = ?"
+                query = f"SELECT timestamp AS Time, investigator AS Investigator, event AS Event FROM Audit_Logs WHERE case_reference = ?"
 
                 database_logs = pd.read_sql_query(query, con, params=(case_query,))
                 con.close()
 
                 if not database_logs.empty:
                     st.success(f"Found {len(database_logs)} records for {case_query}")
-                    st.dataframe(database_logs, use_container_width=True, hide_index=True)
+                    st.session_state['fetched_logs'] = database_logs
+                    st.session_state['fetched_case'] = case_query
                 else:
                     st.warning(f"No database records found for {case_query}")
+                    st.session_state['fetched_logs'] = None
             except Exception as e:
                 st.error(f"Failed to read database: {e}")
 
-    if st.session_state['audit_log']:
-        dataframe_log = pd.DataFrame(st.session_state['audit_log'])
-        st.dataframe(dataframe_log, use_container_width=True)
+    if st.session_state['fetched_logs'] is not None:
+        st.markdown(f"### Showing past records for case: {st.session_state['fetched_case']}'")
+        display_dataframe = st.session_state['fetched_logs']
+        export_data = display_dataframe.to_dict(orient='records')
+        export_case = st.session_state['fetched_case']
+    else:
+        st.markdown(f"### Showing current session records for case: {case_id}")
+        display_dataframe = pd.DataFrame(st.session_state['audit_log'])
+        export_data = st.session_state['audit_log']
+        export_case = case_id
+
+    if not display_dataframe.empty:
+        st.dataframe(display_dataframe, use_container_width=True, hide_index=True)
+    else:
+        st.info("No logs to display for this case yet.")
 
     st.markdown("----------------------------")
 
-    def create_pdf(log_data):
+    def create_pdf(log_data, report_case_id):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font('Arial','B', 16)
-        pdf.cell(40,10, txt=f"Forensic Report: {case_id}")
+        pdf.cell(40,10, txt=f"Forensic Report: {report_case_id}")
         pdf.ln(10)
 
         pdf.set_font('Arial','B', 12)
@@ -533,22 +571,22 @@ elif page == "Audit and Report Page":
     
     col1,col2 = st.columns(2)
     with col1:
-        if st.session_state['audit_log']:
-            pdf_bytes = create_pdf(st.session_state['audit_log'])
+        if export_data:
+            pdf_bytes = create_pdf(export_data, export_case)
 
-            st.download_button(
+        st.download_button(
             label = "Download PDF Report 📄",
             data = pdf_bytes,
-            file_name = f"Forensic_Report_{case_id}.pdf",
+            file_name = f"Forensic_Report_{export_case}.pdf",
             mime = "application/pdf"
         )
             
     with col2:
-        if st.session_state['audit_log']:
-            csv = dataframe_log.to_csv(index=False).encode('utf-8')
+        if not display_dataframe.empty:
+            csv = display_dataframe.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label = "Export CSV Log 💾",
                 data = csv,
-                file_name = f"Log_{case_id}.csv",
+                file_name = f"Log_{export_case}.csv",
                 mime = "text/csv"
             )

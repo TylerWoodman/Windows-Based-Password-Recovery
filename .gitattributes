@@ -1,0 +1,2 @@
+rockyou.txt filter=lfs diff=lfs merge=lfs -text
+Ui/wordlists/rockyou.txt filter=lfs diff=lfs merge=lfs -text
