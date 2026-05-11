@@ -47,7 +47,8 @@ def test_generate_osint_wordlist(mock_client_class):
         pets="Dottie",
         company="Plymouth",
         hobbies="Chess",
-        other="blue"
+        other="blue",
+        word_count=10
     )
 
     assert "Tyler2003" in gemini_results
