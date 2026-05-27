@@ -37,9 +37,14 @@ It provides forensic investigators with an intuitive GUI to extract hashes, crac
 
 2. **Create and activate a virtual environment:**
    ```bash
+   # Create the virtual enviroment
    python -m venv venv
+
+   # Activate on Mac/Linux:
    source venv/bin/activate
-   # On Windows use: venv\Scripts\activate
+   
+   # Activate on Windows:
+   venv\Scripts\activate
    ```
 
 3. **Install required dependencies:**
