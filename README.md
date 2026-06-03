@@ -31,14 +31,17 @@ It provides forensic investigators with an intuitive GUI to extract hashes, crac
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/TylerWoodman/Windows-Based-Password-Recovery.git](https://github.com/TylerWoodman/Windows-Based-Password-Recovery.git)
+   git clone https://github.com/TylerWoodman/Windows-Based-Password-Recovery.git
    cd Windows-Based-Password-Recovery
    ```
 
 2. **Create and activate a virtual environment:**
    ```bash
-   # Create the virtual enviroment
-   python -m venv venv
+   # Create the virtual enviroment in Windows
+   py -m venv venv
+
+   #Create the virtual enviroment in Mac/Linux
+   python3 -m venv venv
 
    # Activate on Mac/Linux:
    source venv/bin/activate
@@ -50,7 +53,7 @@ It provides forensic investigators with an intuitive GUI to extract hashes, crac
 3. **Install required dependencies:**
    Make sure your `requirements.txt` file is in the project folder, then run:
    ```bash
-   pip install -r requirements.txt
+   pip install -r Ui/requirements.txt
    ```
 
 ## 🚀 Usage
